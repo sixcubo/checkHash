@@ -12,17 +12,6 @@ def getFileMD5(filePath):
         return fileMD5
 
 
-def isIgnore(filePath):
-    fileType = ['records', 'jpeg', 'png' ,'jpg' ]
-    if filePath.split('.')[-1] in fileType:
-        print('ignore ' + filePath)
-        return True
-
-    return False
-
-
-
-
 # 获取文件的SHA1值
 def getFileSHA1(filePath):
     with open(filePath, "rb") as fp:
@@ -30,6 +19,15 @@ def getFileSHA1(filePath):
         SHA1Obj.update(fp.read())
         fileSHA1 = SHA1Obj.hexdigest()
         return fileSHA1
+
+
+def isIgnore(filePath):
+    fileType = ['records', 'jpeg', 'png' ,'jpg' ]
+    if filePath.split('.')[-1] in fileType:
+        print('IGNORE\t\t' + filePath)
+        return True
+
+    return False
 
 
 # 检查目录树下文件的SHA1值
@@ -55,9 +53,9 @@ def checkRecords(basepath):
                     if filename in flienNameOfRecord:
                         idx = flienNameOfRecord.index(filename)
                         if fileSHA1 == flienSHA1OfRecord[idx]:
-                            print('SHA1 equle\t' + dirpath + '\\' + filename)
+                            print('SHA1 EQULE\t' + dirpath + '\\' + filename)
                         else:
-                            print('SHA1 not equle\t' + dirpath + '\\' + filename)
+                            print('SHA1 NOT EQULE\t' + dirpath + '\\' + filename)
                             flienSHA1OfRecord[idx] = fileSHA1
                     # 若文件不存在于records，插入记录
                     else:
@@ -66,6 +64,7 @@ def checkRecords(basepath):
                         flienSHA1OfRecord.insert(len(flienSHA1OfRecord), fileSHA1)
 
             # 写入记录
+            fp.seek(0)
             for i in range(len(flienNameOfRecord)):
                 fp.write(flienNameOfRecord[i] + '\t' + flienSHA1OfRecord[i] + "\t\n")
 
@@ -76,11 +75,14 @@ def createRecords(basepath):
         try:
             fp = open(dirpath + '\\' + recordsName, "x")
         except FileExistsError:
-            print(dirpath + '\\' + recordsName + r" is EXISTED")
+            print("RECORDS EXIST\t" + dirpath + '\\' + recordsName)
         else:
             fp.close()
 
 
 if "__main__" == __name__:
-    createRecords(r"D:\testhash")
-    checkRecords(r"D:\testhash")
+    # basepath = sys.argv[1]
+    # basepath = input('Input basepath: ')
+    basepath = 'D:/testhash'
+    createRecords(basepath)
+    checkRecords(basepath)
