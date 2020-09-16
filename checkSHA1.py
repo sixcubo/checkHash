@@ -1,8 +1,11 @@
 import hashlib
-import sys
 import os.path
+import sys
+import time
 
-recordsName = r"SHA1.records"
+recordsName = 'SHA1.records'
+changeRecordsName = 'SHA1_change.records'
+
 
 def getFileMD5(filePath):
     with open(filePath, "rb") as fp:
@@ -22,8 +25,8 @@ def getFileSHA1(filePath):
 
 
 def isIgnore(filePath):
-    fileType = ['records', 'jpeg', 'png' ,'jpg' ]
-    if filePath.split('.')[-1] in fileType:
+    ignoreType = ['records', 'jpeg', 'jpg', 'png', 'mp3', 'flac', 'py']
+    if filePath.split('.')[-1].lower() in ignoreType:
         print('IGNORE\t\t' + filePath)
         return True
 
@@ -34,46 +37,67 @@ def isIgnore(filePath):
 def checkRecords(basepath):
     # 遍历目录树
     for dirpath, dirnames, filenames in os.walk(basepath):
-        # 打开records
-        with open(dirpath + '\\' + recordsName, "r+") as fp:
-            # 读取records中的文件名和SHA1值
-            records = fp.readlines()
-            flienNameOfRecord = []
-            flienSHA1OfRecord = []
-            for i in range(len(records)):
-                records[i] = records[i].split('\t')
-                flienNameOfRecord.insert(i, records[i][0])
-                flienSHA1OfRecord.insert(i, records[i][1])
+        print('\n' + dirpath)
 
-            # 遍历当前目录
-            for filename in filenames:
-                if not isIgnore(dirpath + "\\" + filename):
-                    fileSHA1 = getFileSHA1(dirpath + "\\" + filename)
-                    # 若文件已存在于records，检查与记录是否相同
-                    if filename in flienNameOfRecord:
-                        idx = flienNameOfRecord.index(filename)
-                        if fileSHA1 == flienSHA1OfRecord[idx]:
-                            print('SHA1 EQULE\t' + dirpath + '\\' + filename)
+        changeRecords = {}  # 记录SHA1值有变化的文件
+
+        # 打开 .records，读取记录
+        records = {}
+        recordsFile = open(dirpath + '\\' + recordsName, "r+")
+        linesOfRecords = recordsFile.readlines()
+        for line in linesOfRecords:
+            line = line.split()
+            records[line[0]] = line[1]
+
+        # 检查当前目录下文件的SHA1值
+        for filename in filenames:
+            if not isIgnore(dirpath + '\\' + filename):
+                fileSHA1 = getFileSHA1(dirpath + '\\' + filename)
+                # 若文件已记录于 .records，检查与记录是否相同
+                if records.__contains__(filename):
+                    # 若文件SHA1值与记录不相同，由用户决定下一步动作
+                    if fileSHA1 != records[filename]:
+                        print('*SHA1 NOT EQULE\t' + dirpath + '\\' + filename)
+                        ans = input(' ├──Do you konw this change?(y/n): ')
+                        while ans not in ['y', 'Y', 'n', 'N']:
+                            ans = input(' ├──invalid input. Do you konw this change?(y/n): ')
                         else:
-                            print('SHA1 NOT EQULE\t' + dirpath + '\\' + filename)
-                            flienSHA1OfRecord[idx] = fileSHA1
-                    # 若文件不存在于records，插入记录
+                            if ans == 'y' or ans == 'Y':
+                                records[filename] = fileSHA1
+                                print(' └──MODIFY SHA1.records')
+                            elif ans == 'n' or ans == 'N':
+                                changeRecords[filename] = fileSHA1
+                                print(' └──ADD TO SHA1_change.records')
+                    # 若文件SHA1值与记录相同
                     else:
-                        print('SHA1 not exist\t' + dirpath + '\\' + filename)
-                        flienNameOfRecord.insert(len(flienNameOfRecord), filename)
-                        flienSHA1OfRecord.insert(len(flienSHA1OfRecord), fileSHA1)
+                        print('SHA1 EQULE\t' + dirpath + '\\' + filename)
+                # 若文件未记录于 .records，插入记录
+                else:
+                    print('ADD TO RECORDS\t' + dirpath + '\\' + filename)
+                    records[filename] = fileSHA1
 
-            # 写入记录
-            fp.seek(0)
-            for i in range(len(flienNameOfRecord)):
-                fp.write(flienNameOfRecord[i] + '\t' + flienSHA1OfRecord[i] + "\t\n")
+        # 写入 SHA1.records
+        recordsFile.seek(0)
+        for record in records.items():
+            recordsFile.write(record[0] + '\t' + record[1] + "\n")
+        recordsFile.close()
+
+        # 若存在文件SHA1值改变，写入 SHA1_change.records
+        if changeRecords.__len__() != 0:
+            changeRecordsFile = open(dirpath + '\\' + changeRecordsName, "a")
+            changeRecordsFile.write(time.strftime("%Y-%m-%d %H:%M:%S %a", time.localtime()) + '\n')
+            for record in changeRecords.items():
+                changeRecordsFile.write(record[0] + '\t' + record[1] + "\t\n")
+            changeRecordsFile.write('\n')
+            changeRecordsFile.close()
 
 
-# 遍历目录树，在每个目录下生成records
+# 遍历目录树，在每个目录下生成 .records
 def createRecords(basepath):
     for dirpath, dirnames, filenames in os.walk(basepath):
         try:
             fp = open(dirpath + '\\' + recordsName, "x")
+            print("RECORDS CREATE\t" + dirpath + '\\' + recordsName)
         except FileExistsError:
             print("RECORDS EXIST\t" + dirpath + '\\' + recordsName)
         else:
@@ -83,6 +107,6 @@ def createRecords(basepath):
 if "__main__" == __name__:
     # basepath = sys.argv[1]
     # basepath = input('Input basepath: ')
-    basepath = 'D:/testhash'
+    basepath = 'D:\\testhash'
     createRecords(basepath)
     checkRecords(basepath)
