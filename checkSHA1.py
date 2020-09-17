@@ -1,3 +1,4 @@
+import argparse
 import hashlib
 import os.path
 import sys
@@ -60,7 +61,8 @@ def checkRecords(basepath):
                         print('*SHA1 NOT EQULE\t' + dirpath + '\\' + filename)
                         ans = input(' ├──Do you konw this change?(y/n): ')
                         while ans not in ['y', 'Y', 'n', 'N']:
-                            ans = input(' ├──invalid input. Do you konw this change?(y/n): ')
+                            ans = input(
+                                ' ├──invalid input. Do you konw this change?(y/n): ')
                         else:
                             if ans == 'y' or ans == 'Y':
                                 records[filename] = fileSHA1
@@ -85,7 +87,8 @@ def checkRecords(basepath):
         # 若存在文件SHA1值改变，写入 SHA1_change.records
         if changeRecords.__len__() != 0:
             changeRecordsFile = open(dirpath + '\\' + changeRecordsName, "a")
-            changeRecordsFile.write(time.strftime("%Y-%m-%d %H:%M:%S %a", time.localtime()) + '\n')
+            changeRecordsFile.write(time.strftime(
+                "%Y-%m-%d %H:%M:%S %a", time.localtime()) + '\n')
             for record in changeRecords.items():
                 changeRecordsFile.write(record[0] + '\t' + record[1] + "\t\n")
             changeRecordsFile.write('\n')
@@ -94,6 +97,9 @@ def checkRecords(basepath):
 
 # 遍历目录树，在每个目录下生成 .records
 def createRecords(basepath):
+    if not os.path.exists(basepath):
+        print('Can not find this dir.')
+        return
     for dirpath, dirnames, filenames in os.walk(basepath):
         try:
             fp = open(dirpath + '\\' + recordsName, "x")
@@ -103,10 +109,24 @@ def createRecords(basepath):
         else:
             fp.close()
 
-
 if "__main__" == __name__:
-    # basepath = sys.argv[1]
-    # basepath = input('Input basepath: ')
-    basepath = 'D:\\testhash'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--basepath', help='assign base path')
+    args = parser.parse_args()
+
+    if args.basepath == None:
+        ans = input('Use current dir?(y/n): ')
+        while ans not in ['y', 'Y', 'n', 'N']:
+            ans = input('├──invalid input. Use current dir?(y/n): ')
+        else:
+            if ans == 'y' or ans == 'Y':
+                basepath = os.getcwd()
+                print('└──Work in dir: ' + basepath)
+            elif ans == 'n' or ans == 'N':
+                print('└──Quit')
+                exit()
+    elif args.basepath != None:
+        basepath = args.basepath
+
     createRecords(basepath)
     checkRecords(basepath)
