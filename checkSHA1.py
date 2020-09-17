@@ -4,8 +4,8 @@ import os.path
 import sys
 import time
 
-recordsName = 'SHA1.records'
-changeRecordsName = 'SHA1_change.records'
+recordsName = '#records.txt'
+changeRecordsName = '#change.txt'
 
 
 def getFileMD5(filePath):
@@ -26,7 +26,7 @@ def getFileSHA1(filePath):
 
 
 def isIgnore(filePath):
-    ignoreType = ['records', 'jpeg', 'jpg', 'png', 'mp3', 'flac', 'py']
+    ignoreType = ['txt', 'jpeg', 'jpg', 'png', 'mp3', 'flac', 'py']
     if filePath.split('.')[-1].lower() in ignoreType:
         print('IGNORE\t\t' + filePath)
         return True
@@ -39,10 +39,9 @@ def checkRecords(basepath):
     # 遍历目录树
     for dirpath, dirnames, filenames in os.walk(basepath):
         print('\n' + dirpath)
-
         changeRecords = {}  # 记录SHA1值有变化的文件
 
-        # 打开 .records，读取记录
+        # 打开SHA1.records，读取记录
         records = {}
         recordsFile = open(dirpath + '\\' + recordsName, "r+")
         linesOfRecords = recordsFile.readlines()
@@ -54,58 +53,58 @@ def checkRecords(basepath):
         for filename in filenames:
             if not isIgnore(dirpath + '\\' + filename):
                 fileSHA1 = getFileSHA1(dirpath + '\\' + filename)
-                # 若文件已记录于 .records，检查与记录是否相同
+                # 若文件已记录于SHA1.records，检查与记录是否相同
                 if records.__contains__(filename):
                     # 若文件SHA1值与记录不相同，由用户决定下一步动作
                     if fileSHA1 != records[filename]:
                         print('*SHA1 NOT EQULE\t' + dirpath + '\\' + filename)
-                        ans = input(' ├──Do you konw this change?(y/n): ')
+                        ans = input(' ├─Do you konw this change?(y/n): ')
                         while ans not in ['y', 'Y', 'n', 'N']:
                             ans = input(
-                                ' ├──invalid input. Do you konw this change?(y/n): ')
+                                ' ├─invalid input. Do you konw this change?(y/n): ')
                         else:
                             if ans == 'y' or ans == 'Y':
                                 records[filename] = fileSHA1
-                                print(' └──MODIFY SHA1.records')
+                                print(' └─MODIFY SHA1.records')
                             elif ans == 'n' or ans == 'N':
                                 changeRecords[filename] = fileSHA1
-                                print(' └──ADD TO SHA1_change.records')
+                                print(' └─ADD TO SHA1_change.records')
                     # 若文件SHA1值与记录相同
                     else:
                         print('SHA1 EQULE\t' + dirpath + '\\' + filename)
-                # 若文件未记录于 .records，插入记录
+                # 若文件未记录于SHA1.records，插入记录
                 else:
                     print('ADD TO RECORDS\t' + dirpath + '\\' + filename)
                     records[filename] = fileSHA1
 
-        # 写入 SHA1.records
+        # 写入SHA1.records
         recordsFile.seek(0)
         for record in records.items():
             recordsFile.write(record[0] + '\t' + record[1] + "\n")
         recordsFile.close()
 
-        # 若存在文件SHA1值改变，写入 SHA1_change.records
+        # 若存在文件SHA1值改变，写入SHA1_change.records
         if changeRecords.__len__() != 0:
             changeRecordsFile = open(dirpath + '\\' + changeRecordsName, "a")
             changeRecordsFile.write(time.strftime(
                 "%Y-%m-%d %H:%M:%S %a", time.localtime()) + '\n')
             for record in changeRecords.items():
-                changeRecordsFile.write(record[0] + '\t' + record[1] + "\t\n")
+                changeRecordsFile.write(record[0] + '\t' + record[1] + "\n")
             changeRecordsFile.write('\n')
             changeRecordsFile.close()
 
 
-# 遍历目录树，在每个目录下生成 .records
+# 遍历目录树，在每个目录下生成SHA1.records
 def createRecords(basepath):
     if not os.path.exists(basepath):
         print('Can not find this dir.')
-        return
+        exit()
     for dirpath, dirnames, filenames in os.walk(basepath):
         try:
             fp = open(dirpath + '\\' + recordsName, "x")
-            print("RECORDS CREATE\t" + dirpath + '\\' + recordsName)
+            print("CREATE RECORDS\t" + dirpath)
         except FileExistsError:
-            print("RECORDS EXIST\t" + dirpath + '\\' + recordsName)
+            print("RECORDS EXIST\t" + dirpath)
         else:
             fp.close()
 
@@ -115,15 +114,15 @@ if "__main__" == __name__:
     args = parser.parse_args()
 
     if args.basepath == None:
-        ans = input('Use current dir?(y/n): ')
+        ans = input('Use current dir "' + os.getcwd() + '" ?(y/n): ')
         while ans not in ['y', 'Y', 'n', 'N']:
-            ans = input('├──invalid input. Use current dir?(y/n): ')
+            ans = input('├─invalid input. Use current dir?(y/n): ')
         else:
             if ans == 'y' or ans == 'Y':
                 basepath = os.getcwd()
-                print('└──Work in dir: ' + basepath)
+                print('└─Work in dir: ' + basepath)
             elif ans == 'n' or ans == 'N':
-                print('└──Quit')
+                print('└─Quit')
                 exit()
     elif args.basepath != None:
         basepath = args.basepath
