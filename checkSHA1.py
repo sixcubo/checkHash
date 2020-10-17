@@ -69,55 +69,65 @@ def checkSHA1(records, changes, dirpath, filenames):
 # 扫描basedir
 def scanBaseDir(basedir):
     # 遍历目录树
-    for dirpath, _, filenames in os.walk(basedir):
+    for dirpath, dirnames, filenames in os.walk(basedir):
         print('\n' + dirpath)
-        sha1Rec = {}    # 存储#sha1.txt的记录
-        errorRec = {}   # 存储SHA1值有变化的记录
+        if '#ignore' in filenames:
+            # 忽略此文件夹及子文件夹
+            print('IGNORE DIR\t' + dirpath)
+            dirnames[:] = []
+        else:
+            sha1Rec = {}    # 存储#sha1.txt的记录
+            errorRec = {}   # 存储SHA1值有变化的记录
 
-        # 打开#sha1.txt，读取记录
-        recordsFO = open(dirpath + '\\#sha1.txt', "r+")
-        linesOfRecords = recordsFO.readlines()
-        for line in linesOfRecords:
-            line = line.split()
-            sha1Rec[line[0]] = line[1]
+            # 打开#sha1.txt，读取记录
+            recordsFO = open(dirpath + '\\#sha1.txt', "r+")
+            linesOfRecords = recordsFO.readlines()
+            for line in linesOfRecords:
+                line = line.split()
+                sha1Rec[line[0]] = line[1]
 
-        # 检查SHA1值
-        checkSHA1(sha1Rec, errorRec, dirpath, filenames)
+            # 检查SHA1值
+            checkSHA1(sha1Rec, errorRec, dirpath, filenames)
 
-        # 将records写入#sha1.txt
-        recordsFO.seek(0)
-        for record in sha1Rec.items():
-            recordsFO.write(record[0] + '\t' + record[1] + "\n")
-        recordsFO.close()
+            # 将records写入#sha1.txt
+            recordsFO.seek(0)
+            for record in sha1Rec.items():
+                recordsFO.write(record[0] + '\t' + record[1] + "\n")
+            recordsFO.close()
 
-        # 若存在文件SHA1值改变，将变化写入#error.txt
-        if errorRec.__len__() != 0:
-            changesFO = open(dirpath + '\\#error.txt', "a")
-            changesFO.write(time.strftime(
-                "%Y-%m-%d %H:%M:%S %a", time.localtime()) + '\n')
-            for record in errorRec.items():
-                changesFO.write(record[0] + '\t' + record[1] + "\n")
-            changesFO.write('\n')
-            changesFO.close()
+            # 若存在文件SHA1值改变，将变化写入#error.txt
+            if errorRec.__len__() != 0:
+                changesFO = open(dirpath + '\\#error.txt', "a")
+                changesFO.write(time.strftime(
+                    "%Y-%m-%d %H:%M:%S %a", time.localtime()) + '\n')
+                for record in errorRec.items():
+                    changesFO.write(record[0] + '\t' + record[1] + "\n")
+                changesFO.write('\n')
+                changesFO.close()
 
 
 # 遍历目录树，在每个目录下生成sha1.txt
 def createRecords(basedir):
-    for dirpath, _, __ in os.walk(basedir):
-        try:
-            fo = open(dirpath + '\\#sha1.txt', "x")
-            print("CREATE RECORDS\t" + dirpath)
-        except FileExistsError:
-            print("RECORDS EXIST\t" + dirpath)
+    for dirpath, dirnames, filenames in os.walk(basedir):
+        if '#ignore' in filenames:
+            # 忽略此文件夹及子文件夹
+            print('IGNORE DIR\t' + dirpath)
+            dirnames[:] = []
         else:
-            fo.close()
+            try:
+                fo = open(dirpath + '\\#sha1.txt', "x")
+                print("CREATE RECORDS\t" + dirpath)
+            except FileExistsError:
+                print("RECORDS EXIST\t" + dirpath)
+            else:
+                fo.close()
 
 
 def param_run(basedir):
     if not os.path.exists(basedir):
         print('Can not find this dir.')
     else:
-        ans = input('Are you sure you want use dir: "' +
+        ans = input('Are you sure you want to use dir: "' +
                     basedir + '" ?(y/n): ')
         while ans not in ['y', 'Y', 'n', 'N']:
             ans = input('├─invalid input. Use dir: "' + basedir + '" ?(y/n): ')
@@ -146,7 +156,7 @@ def param_clean(cleandir):
     if not os.path.exists(cleandir):
         print('Can not find this dir.')
     else:
-        ans = input('Are you sure you want use dir: "' +
+        ans = input('Are you sure you want to use dir: "' +
                     cleandir + '" ?(y/n): ')
         while ans not in ['y', 'Y', 'n', 'N']:
             ans = input('├─invalid input. Use dir: "' +
