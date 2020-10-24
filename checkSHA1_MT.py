@@ -5,15 +5,12 @@ import os
 import os.path
 import threading
 import time
-import enum
+import deepdiff
 
 
 UNSCAN = 'UNSCAN'
 SCANNING = 'SCANNING'
 SCANNED = 'SCANNED'
-
-# NORMAL = 'NORMAL'
-# CHANGED = 'CHANGED'
 
 
 class RecordElem(dict):
@@ -65,20 +62,23 @@ class Record:
             jsonData[dirpath] = []
             elems = self.getElems(dirpath)
             for elem in elems:
-                elem.__dict__.pop('fileLock')
+                try:
+                    elem.__dict__.pop('fileLock')
+                except KeyError:
+                    pass
                 jsonData[dirpath].append(elem.__dict__)
         return jsonData
 
-    @classmethod
-    def convert2obj(cls, jsonData):
-        objData = {}
-        for dirpath in jsonData:
-            objData[dirpath] = []
-            elems = jsonData[dirpath]
-            for elem in elems:
-                objData[dirpath].append(RecordElem(
-                    elem['fileName'], elem['fileSHA1']))
-        return objData
+    # @classmethod
+    # def convert2obj(cls, jsonData):
+    #     objData = {}
+    #     for dirpath in jsonData:
+    #         objData[dirpath] = []
+    #         elems = jsonData[dirpath]
+    #         for elem in elems:
+    #             objData[dirpath].append(RecordElem(
+    #                 elem['fileName'], elem['fileSHA1']))
+    #     return objData
 
 
 class Scanner(threading.Thread):
@@ -108,34 +108,50 @@ class Checker:
         self.sharedRecord = sharedRecord
 
     def createNewJson(self):
-        newJsonPath = self.sharedRecord.baseDir + '\\' + self.jsonNameWithTime()
+        newJsonPath = self.sharedRecord.baseDir + \
+            '\\' + self.nameWithTime('#sha1_.json')
         with open(newJsonPath, 'w') as f:
             json.dump(self.sharedRecord.convert2json(), f, ensure_ascii=False,
                       sort_keys=True, indent=4, separators=(',', ':'))
 
     def compare(self):
-        cnt = self.sharedRecord.data
-        pre = {}
+        cnt = self.sharedRecord.convert2json()
+        past = self.getPastJsonData()
 
-        latestJsonPath = self.sharedRecord.baseDir + '\\' + self.getLatestJson()
-        with open(latestJsonPath, 'r') as fp:
-            try:
-                jsonData = json.load(fp)
-                pre = Record.convert2obj(jsonData)
-            except json.decoder.JSONDecodeError:
-                print('读取json文件出错, json文件为空')
-            except TypeError:
-                print('读取json文件出错, 文件数据缺失')
+        diff = deepdiff.DeepDiff(cnt, past)
+        if diff == {} or past == {}:
+            print('无差异')
+        else:
+            newChangePath = self.sharedRecord.baseDir + \
+                '\\' + self.nameWithTime('#change_.json')
+            with open(newChangePath, 'w') as f:
+                json.dump(diff, f, ensure_ascii=False, sort_keys=True,
+                        indent=4, separators=(',', ':'))
 
-    def jsonNameWithTime(self):
-        return '#sha1_' + time.strftime("%Y%m%d_%H%M%S", time.localtime()) + '.json'
+    def nameWithTime(self, name):
+        prefix, suffix = name.split('.')
+        return prefix + time.strftime("%Y%m%d_%H%M%S", time.localtime()) + '.' + suffix
 
-    def getLatestJson(self):
+    def getPastJsonData(self):
+        data = {}
+
         filenames = os.listdir(self.sharedRecord.baseDir)
         jsons = [filename for filename in filenames if filename.find(
-            '#sha1_', 0, 6) == 0]
-        jsons.sort()
-        return jsons.pop()
+            '#sha1_', 0, 6) == 0] 
+        if len(jsons) != 0:
+            jsons.sort()
+            latestJsonPath = self.sharedRecord.baseDir + '\\' + jsons.pop()
+            with open(latestJsonPath, 'r') as fp:
+                try:
+                    data = json.load(fp)
+                except json.decoder.JSONDecodeError:
+                    print('读取json文件出错, json文件为空')
+                except TypeError:
+                    print('读取json文件出错, 文件数据缺失')
+        elif jsons.count == 0:
+            pass
+
+        return data
 
 
 # 获取文件的SHA1值
@@ -168,8 +184,8 @@ if "__main__" == __name__:
             s.join()
 
         checker = Checker(sharedRec)
-        checker.createNewJson()
         checker.compare()
+        checker.createNewJson()
     else:
         # 未指定参数
         print('Please assign parameter.')
