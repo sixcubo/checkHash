@@ -1,4 +1,3 @@
-
 import argparse
 import hashlib
 import json
@@ -12,20 +11,30 @@ import enum
 UNSCAN = 'UNSCAN'
 SCANNING = 'SCANNING'
 SCANNED = 'SCANNED'
-CHANGED = 'CHANGED'
+
+# NORMAL = 'NORMAL'
+# CHANGED = 'CHANGED'
 
 
-class RecordElem:
-    def __init__(self, fileName):
+class RecordElem(dict):
+    def __init__(self, fileName, fileSHA1='', fileLock=UNSCAN):
         self.fileName = fileName
-        self.fileSHA1 = ''
-        self.fileState = UNSCAN
+        self.fileSHA1 = fileSHA1
+        self.fileLock = fileLock
+        # self.fileState = fileState
 
 
 class Record:
-    def __init__(self, baseDir):
-        self.baseDir = baseDir
-        self.data = self.pruneDir(baseDir)
+    def __init__(self):
+        self.baseDir = ''
+        self.data = {}
+
+    @classmethod
+    def byFiles(cls, baseDir):
+        inst = cls()
+        inst.baseDir = baseDir
+        inst.data = inst.pruneDir(baseDir)
+        return inst
 
     # 对目录树进行剪枝
     def pruneDir(self, baseDir):
@@ -43,21 +52,33 @@ class Record:
                         tree[dirpath].append(RecordElem(filename))
         return tree
 
-    def trans2json(self):
-        data4json = {}
-        for dirpath in self.getAllPath():
-            data4json[dirpath] = []
-            elems = self.getElems(dirpath)
-            for elem in elems:
-                data4json[dirpath].append(
-                    {'name': elem.fileName, 'sha1': elem.fileSHA1, 'state': elem.fileState})
-        return data4json
-
     def getAllPath(self):
         return self.data.keys()
 
     def getElems(self, dirpath):
         return self.data[dirpath]
+
+    # 将Record类转换为能存储在Json中的对象
+    def convert2json(self):
+        jsonData = {}
+        for dirpath in self.getAllPath():
+            jsonData[dirpath] = []
+            elems = self.getElems(dirpath)
+            for elem in elems:
+                elem.__dict__.pop('fileLock')
+                jsonData[dirpath].append(elem.__dict__)
+        return jsonData
+
+    @classmethod
+    def convert2obj(cls, jsonData):
+        objData = {}
+        for dirpath in jsonData:
+            objData[dirpath] = []
+            elems = jsonData[dirpath]
+            for elem in elems:
+                objData[dirpath].append(RecordElem(
+                    elem['fileName'], elem['fileSHA1']))
+        return objData
 
 
 class Scanner(threading.Thread):
@@ -69,31 +90,52 @@ class Scanner(threading.Thread):
         for dirpath in self.sharedRec.getAllPath():
             elems = self.sharedRec.getElems(dirpath)
             for elem in elems:
-                if elem.fileState == UNSCAN:
-                    elem.fileState = SCANNING
+                lock.acquire()
+                if elem.fileLock == UNSCAN:
+                    elem.fileLock = SCANNING
+                    lock.release()
+                    print(self.name + '\t' + dirpath + '\\' + elem.fileName)
+
                     fileSHA1 = getFileSHA1(dirpath + '\\' + elem.fileName)
                     elem.fileSHA1 = fileSHA1
-                    elem.fileState = SCANNED
+                    elem.fileLock = SCANNED
+                else:
+                    lock.release()
 
 
 class Checker:
     def __init__(self, sharedRecord):
         self.sharedRecord = sharedRecord
 
+    def createNewJson(self):
+        newJsonPath = self.sharedRecord.baseDir + '\\' + self.jsonNameWithTime()
+        with open(newJsonPath, 'w') as f:
+            json.dump(self.sharedRecord.convert2json(), f, ensure_ascii=False,
+                      sort_keys=True, indent=4, separators=(',', ':'))
+
     def compare(self):
-        jsonPath = self.sharedRecord.baseDir + '\\' + self.jsonNameWithTime()
-        with open(jsonPath, 'w') as f:
-            json.dump(self.sharedRecord.trans2json(), f, ensure_ascii=False,
-                      sort_keys=True, indent=4, separators=(',', ':'), )
+        cnt = self.sharedRecord.data
+        pre = {}
 
-    def load(self):
-        pass
-
-    def dump(self):
-        pass
+        latestJsonPath = self.sharedRecord.baseDir + '\\' + self.getLatestJson()
+        with open(latestJsonPath, 'r') as fp:
+            try:
+                jsonData = json.load(fp)
+                pre = Record.convert2obj(jsonData)
+            except json.decoder.JSONDecodeError:
+                print('读取json文件出错, json文件为空')
+            except TypeError:
+                print('读取json文件出错, 文件数据缺失')
 
     def jsonNameWithTime(self):
         return '#sha1_' + time.strftime("%Y%m%d_%H%M%S", time.localtime()) + '.json'
+
+    def getLatestJson(self):
+        filenames = os.listdir(self.sharedRecord.baseDir)
+        jsons = [filename for filename in filenames if filename.find(
+            '#sha1_', 0, 6) == 0]
+        jsons.sort()
+        return jsons.pop()
 
 
 # 获取文件的SHA1值
@@ -113,9 +155,9 @@ if "__main__" == __name__:
     baseDir = parseCL()
 
     if baseDir != None:
-        sharedRec = Record(baseDir)
+        sharedRec = Record.byFiles(baseDir)
+        lock = threading.Lock()
 
-        # lock = threading.Lock()
         scanners = []
         threadNum = 2
         for i in range(0, threadNum):
@@ -126,8 +168,8 @@ if "__main__" == __name__:
             s.join()
 
         checker = Checker(sharedRec)
+        checker.createNewJson()
         checker.compare()
-
     else:
         # 未指定参数
         print('Please assign parameter.')
