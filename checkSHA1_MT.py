@@ -13,7 +13,7 @@ SCANNING = 'SCANNING'
 SCANNED = 'SCANNED'
 
 
-class RecordElem(dict):
+class RecordElem:
     def __init__(self, fileName, fileSHA1='', fileLock=UNSCAN):
         self.fileName = fileName
         self.fileSHA1 = fileSHA1
@@ -69,17 +69,6 @@ class Record:
                 jsonData[dirpath].append(elem.__dict__)
         return jsonData
 
-    # @classmethod
-    # def convert2obj(cls, jsonData):
-    #     objData = {}
-    #     for dirpath in jsonData:
-    #         objData[dirpath] = []
-    #         elems = jsonData[dirpath]
-    #         for elem in elems:
-    #             objData[dirpath].append(RecordElem(
-    #                 elem['fileName'], elem['fileSHA1']))
-    #     return objData
-
 
 class Scanner(threading.Thread):
     def __init__(self, sharedRecord):
@@ -96,11 +85,19 @@ class Scanner(threading.Thread):
                     lock.release()
                     print(self.name + '\t' + dirpath + '\\' + elem.fileName)
 
-                    fileSHA1 = getFileSHA1(dirpath + '\\' + elem.fileName)
+                    fileSHA1 = self.getFileSHA1(dirpath + '\\' + elem.fileName)
                     elem.fileSHA1 = fileSHA1
                     elem.fileLock = SCANNED
                 else:
                     lock.release()
+
+    # 获取文件的SHA1值
+    def getFileSHA1(self, filePath):
+        with open(filePath, "rb") as fp:
+            SHA1Obj = hashlib.sha1()
+            SHA1Obj.update(fp.read())
+            fileSHA1 = SHA1Obj.hexdigest()
+            return fileSHA1
 
 
 class Checker:
@@ -126,7 +123,7 @@ class Checker:
                 '\\' + self.nameWithTime('#change_.json')
             with open(newChangePath, 'w') as f:
                 json.dump(diff, f, ensure_ascii=False, sort_keys=True,
-                        indent=4, separators=(',', ':'))
+                          indent=4, separators=(',', ':'))
 
     def nameWithTime(self, name):
         prefix, suffix = name.split('.')
@@ -137,7 +134,7 @@ class Checker:
 
         filenames = os.listdir(self.sharedRecord.baseDir)
         jsons = [filename for filename in filenames if filename.find(
-            '#sha1_', 0, 6) == 0] 
+            '#sha1_', 0, 6) == 0]
         if len(jsons) != 0:
             jsons.sort()
             latestJsonPath = self.sharedRecord.baseDir + '\\' + jsons.pop()
@@ -154,66 +151,66 @@ class Checker:
         return data
 
 
-# 获取文件的SHA1值
-def getFileSHA1(filePath):
-    with open(filePath, "rb") as fp:
-        SHA1Obj = hashlib.sha1()
-        SHA1Obj.update(fp.read())
-        fileSHA1 = SHA1Obj.hexdigest()
-        return fileSHA1
+def process(rootPath, threadNum):
+    sharedRec = Record.byFiles(rootPath)
 
+    time_start = time.time()
 
-def parseCL():
-    return 'D:\\testhash'
+    scanners = []
+    for i in range(0, threadNum):
+        scanner = Scanner(sharedRec)
+        scanner.start()
+        scanners.append(scanner)
+    for s in scanners:
+        s.join()
+
+    time_end = time.time()
+    print('time cost: ', time_end-time_start, 's')
+
+    checker = Checker(sharedRec)
+    checker.compare()
+    checker.createNewJson()
 
 
 if "__main__" == __name__:
-    baseDir = parseCL()
+    lock = threading.Lock()
+    threadNum = 2   # 默认双线程
 
-    if baseDir != None:
-        sharedRec = Record.byFiles(baseDir)
-        lock = threading.Lock()
+    # 命令行参数
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-r', '--run', nargs='*', help='assign the paths')
+    parser.add_argument('-t', '--thread', help='assign the thread number')
+    args = parser.parse_args()
 
-        scanners = []
-        threadNum = 2
-        for i in range(0, threadNum):
-            scanner = Scanner(sharedRec)
-            scanner.start()
-            scanners.append(scanner)
-        for s in scanners:
-            s.join()
+    if args.thread != None:
+        threadNum = int(args.thread)
 
-        checker = Checker(sharedRec)
-        checker.compare()
-        checker.createNewJson()
-    else:
-        # 未指定参数
-        print('Please assign parameter.')
+    if args.run != None:
+        if args.run == []:
+            # 若 -r 后没有指定路径, 使用当前路径
+            rootPath = os.getcwd()
+            print('\033[31;49m', end='')    # 红色终端文字
+            ans = input('\nUse current path: "' + rootPath + '" ?(y/n): ')
+            print('\033[0m', end='')
+            if ans == 'y' or ans == 'Y':
+                process(rootPath, threadNum)
+            else:
+                print('Skip.')
+            print('Finish.')
+        else:
+            # 依次取出 -r 后的路径
+            for rootPath in args.run:
+                print('\033[31;49m', end='')    # 红色终端文字
+                ans = input('\nUse the path: "' + rootPath + '" ?(y/n): ')
+                print('\033[0m', end='')
+                if ans == 'y' or ans == 'Y':
+                    process(rootPath, threadNum)
+                else:
+                    print('Skip.')
+            print('Finish.')
 
-    # def readOldTree(self):
-    #     print('============ Create JSON files ============')
-    #     try:
-    #         fp = open(jsonPath, "x")
-    #         print("CREATE FILE:\t" + jsonPath)
-    #     except FileExistsError:
-    #         print("FILE EXISTED:\t" + jsonPath)
-    #     else:
-    #         fp.close()
-
-    # def compare(self):
-    #     jsonPath = self.sharedRec.baseDir + '\\' + SHA1_JSON
-
-    #     print('============ Compare files SHA1 ============')
-    #     fp = open(jsonPath, 'r+')
-    #     try:
-    #         old_tree = json.load(fp)
-    #     except json.decoder.JSONDecodeError:
-    #         old_tree = {}
-    #     new_tree = self.sharedRec.tree
-
-    #     # 比较两棵树
-    #     for dirpath in new_tree:
-    #         new_files = new_tree[dirpath]
-    #         old_files = old_tree[dirpath]
-
-    #     fp.close()
+    if args.run == None and args.thread == None:
+        print("""
+        A tool to help you quickly check the files hash value.
+        You can use the command -r to run.
+        """)
